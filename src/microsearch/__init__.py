@@ -1,18 +1,18 @@
 from collections import defaultdict
 from textwrap import wrap
-from typing import  Callable, Generator,  Hashable, Iterable, Literal, Sequence
+from typing import Callable, Generator, Hashable, Iterable, Literal, Sequence
 
 from sqlmodel import SQLModel, Session, select, text, func
 from sqlalchemy import Engine
 from pydantic import BaseModel
 
 
-engine: Engine = ...
+def get_engine() -> Engine:
+    raise NotImplementedError("The `get_engine` function should be overridden by client")
 
 
-def set_engine(engine_: Engine) -> None:
-    global engine
-    engine = engine_
+def check_extensions() -> None:
+    engine = get_engine()
     with Session(engine) as session:
         session.exec(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         session.exec(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
@@ -23,11 +23,9 @@ def oneof(text: str) -> str:
     return " OR ".join(text.split())
 
 
-
 def wrapped(text: str, width: int = 70) -> str:
     """Return text with words wrapped to width."""
     return "\n".join(wrap(text, width=width))
-
 
 
 class Result[T: SQLModel](BaseModel):
@@ -43,13 +41,13 @@ def trigram[T: SQLModel](
     limit: int = 20,
 ) -> Generator[Result[T], None, None]:
     """Perform trigram (fuzzy) search over column. Return similar results."""
+    engine = get_engine()
     with Session(engine) as session:
         scorer = func.similarity(query, text(column))
         statement = select(scorer, schema).order_by(scorer.desc()).limit(limit)
         rows = session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="trigram")
-        
 
 
 def semantic[T: SQLModel](
@@ -59,14 +57,13 @@ def semantic[T: SQLModel](
     limit: int = 20,
 ) -> Generator[Result[T], None, None]:
     """Perform semantic (vector) search over column. Return nearby results."""
+    engine = get_engine()
     with Session(engine) as session:
         scorer = 1 - schema.model_fields[column].sa_column.cosine_distance(query)
         statement = select(scorer, schema).order_by(scorer.desc()).limit(limit)
         rows = session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="semantic")
-
-
 
 
 def fulltext[T: SQLModel](
@@ -77,18 +74,15 @@ def fulltext[T: SQLModel](
     multimatch: bool = True,
 ) -> Generator[Result[T], None, None]:
     """Perform full-text search over column. Return matched results."""
+    engine = get_engine()
     with Session(engine) as session:
-        scorer = text(
-            f"ts_rank_cd(to_tsvector({column}), websearch_to_tsquery(:query)) AS score"
-        )
+        scorer = text(f"ts_rank_cd(to_tsvector({column}), websearch_to_tsquery(:query)) AS score")
         statement = select(scorer, schema).order_by(text("score DESC")).limit(limit)
         if multimatch:
             query = oneof(query)
         rows = session.exec(statement, params={"query": query})
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="fulltext")
-
-
 
 
 def weighted_reciprocal_rank[T](
