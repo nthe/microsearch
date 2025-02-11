@@ -2,17 +2,20 @@ from collections import defaultdict
 from textwrap import wrap
 from typing import  Callable, Generator,  Hashable, Iterable, Literal, Sequence
 
-from sqlmodel import Field, SQLModel, Session, create_engine, Column, Relationship, select, text, func
-from pgvector.sqlalchemy import Vector
+from sqlmodel import SQLModel, Session, create_engine, select, text, func
+from sqlalchemy import Engine
 from pydantic import BaseModel
 
 
-engine = create_engine("postgresql://admin:admin@localhost:5432/db")
+engine: Engine = ...
 
 
-with Session(engine) as session:
-    session.exec(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-    session.exec(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+def set_engine(engine_: Engine) -> None:
+    global engine
+    engine = engine_
+    with Session(engine) as session:
+        session.exec(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        session.exec(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
 
 
 def oneof(text: str) -> str:
