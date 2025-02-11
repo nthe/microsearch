@@ -14,13 +14,13 @@ Define models
 
 ```py
 from pgvector.sqlalchemy import Vector
-from sqlmodel import Field, SQLModel, Session, Column, Relationship
+from sqlmodel import create_engine, Field, SQLModel, Session, Column, Relationship
 
 import microsearch as ms
 
-engine = ms.create_engine("postgresql://admin:admin@localhost:5432/db")
+engine = create_engine("postgresql://admin:admin@localhost:5432/db")
 
-ms.set_engine(engine)
+ms.get_engine = lambda: engine
 
 class Meta(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
