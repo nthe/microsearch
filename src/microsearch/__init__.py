@@ -2,7 +2,7 @@ from collections import defaultdict
 from textwrap import wrap
 from typing import  Callable, Generator,  Hashable, Iterable, Literal, Sequence
 
-from sqlmodel import SQLModel, Session, create_engine, select, text, func
+from sqlmodel import SQLModel, Session, select, text, func
 from sqlalchemy import Engine
 from pydantic import BaseModel
 
