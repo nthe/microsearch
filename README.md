@@ -2,6 +2,12 @@
 
 High-level (and possibly very slow) search over PostgreSQL + pgvector. Good for PoCs and prototypes.
 
+# Installation
+
+```sh
+uv add git+https://github.com/nthe/microsearch
+```
+
 # Usage
 
 Define models
@@ -41,8 +47,13 @@ from itertools import batched
 
 import microsearch as ms
 
-book = httpx.get("https://www.gutenberg.org/cache/epub/2591/pg2591.txt").text
 
+def embed(text: str) -> list[float]:
+    import ollama
+    return ollama.embed(model="all-minilm:33m", input=text).embeddings[0]
+
+
+book = httpx.get("https://www.gutenberg.org/cache/epub/2591/pg2591.txt").text
 
 docs = []
 for no, words in enumerate(batched(book.split(), n=100)):
@@ -61,6 +72,12 @@ Search
 
 ```py
 import microsearch as ms
+
+
+def ident(doc: ms.Result[Document]) -> str:
+    """Return unique (hashable) property of the object."""
+    return doc.item.id
+
 
 docs, scores = ms.weighted_reciprocal_rank(
     arrays=[
