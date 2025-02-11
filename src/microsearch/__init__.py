@@ -70,6 +70,7 @@ class MicroSearch:
         multimatch: bool = True,
     ) -> Generator[Result[T], None, None]:
         """Perform full-text search over column. Return matched results."""
+        # FIXME: Little Bobby Tables would love this!
         scorer = text(f"ts_rank_cd(to_tsvector({column}), websearch_to_tsquery(:query)) AS score")
         statement = select(scorer, schema).order_by(text("score DESC")).limit(limit)
         if multimatch:
