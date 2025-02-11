@@ -1,21 +1,12 @@
 from collections import defaultdict
+from contextlib import contextmanager
+from dataclasses import dataclass
 from textwrap import wrap
 from typing import Callable, Generator, Hashable, Iterable, Literal, Sequence
 
 from sqlmodel import SQLModel, Session, select, text, func
 from sqlalchemy import Engine
 from pydantic import BaseModel
-
-
-def get_engine() -> Engine:
-    raise NotImplementedError("The `get_engine` function should be overridden by client")
-
-
-def check_extensions() -> None:
-    engine = get_engine()
-    with Session(engine) as session:
-        session.exec(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        session.exec(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
 
 
 def oneof(text: str) -> str:
@@ -34,55 +25,64 @@ class Result[T: SQLModel](BaseModel):
     item: T
 
 
-def trigram[T: SQLModel](
-    query: str,
-    schema: T,
-    column: str = "text",
-    limit: int = 20,
-) -> Generator[Result[T], None, None]:
-    """Perform trigram (fuzzy) search over column. Return similar results."""
-    engine = get_engine()
-    with Session(engine) as session:
+@dataclass
+class MicroSearch:
+    session: Session
+
+    def check_extensions(self) -> None:
+        self.session.exec(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        self.session.exec(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+
+    def trigram[T: SQLModel](
+        self,
+        query: str,
+        schema: T,
+        column: str = "text",
+        limit: int = 20,
+    ) -> Generator[Result[T], None, None]:
+        """Perform trigram (fuzzy) search over column. Return similar results."""
         scorer = func.similarity(query, text(column))
         statement = select(scorer, schema).order_by(scorer.desc()).limit(limit)
-        rows = session.exec(statement)
+        rows = self.session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="trigram")
 
-
-def semantic[T: SQLModel](
-    query: list[float],
-    schema: T,
-    column: str = "vector",
-    limit: int = 20,
-) -> Generator[Result[T], None, None]:
-    """Perform semantic (vector) search over column. Return nearby results."""
-    engine = get_engine()
-    with Session(engine) as session:
+    def semantic[T: SQLModel](
+        self,
+        query: list[float],
+        schema: T,
+        column: str = "vector",
+        limit: int = 20,
+    ) -> Generator[Result[T], None, None]:
+        """Perform semantic (vector) search over column. Return nearby results."""
         scorer = 1 - schema.model_fields[column].sa_column.cosine_distance(query)
         statement = select(scorer, schema).order_by(scorer.desc()).limit(limit)
-        rows = session.exec(statement)
+        rows = self.session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="semantic")
 
-
-def fulltext[T: SQLModel](
-    query: str,
-    schema: T,
-    column: str = "text",
-    limit: int = 20,
-    multimatch: bool = True,
-) -> Generator[Result[T], None, None]:
-    """Perform full-text search over column. Return matched results."""
-    engine = get_engine()
-    with Session(engine) as session:
+    def fulltext[T: SQLModel](
+        self,
+        query: str,
+        schema: T,
+        column: str = "text",
+        limit: int = 20,
+        multimatch: bool = True,
+    ) -> Generator[Result[T], None, None]:
+        """Perform full-text search over column. Return matched results."""
         scorer = text(f"ts_rank_cd(to_tsvector({column}), websearch_to_tsquery(:query)) AS score")
         statement = select(scorer, schema).order_by(text("score DESC")).limit(limit)
         if multimatch:
             query = oneof(query)
-        rows = session.exec(statement, params={"query": query})
+        rows = self.session.exec(statement, params={"query": query})
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="fulltext")
+
+
+@contextmanager
+def MicroSession(engine: Engine):
+    with Session(engine) as session:
+        yield MicroSearch(session=session)
 
 
 def weighted_reciprocal_rank[T](
