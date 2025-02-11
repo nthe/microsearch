@@ -1,0 +1,18 @@
+[project]
+name = "microsearch"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pgvector>=0.3.6",
+    "psycopg2-binary>=2.9.10",
+    "sqlmodel>=0.0.22",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    "ollama>=0.4.7",
+    "ruff>=0.9.6",
+]
