@@ -126,9 +126,9 @@ def ident(doc: Result[Document]) -> str:
 with MicroSession(engine) as sx:
     docs, scores = weighted_reciprocal_rank(
         arrays=[
-        sx.fulltext(query=query, schema=Document, multimatch=True),
-        sx.semantic(query=embed(query), schema=Document),
-        sx.trigram(query=query, schema=Document),
+            sx.fulltext(query=query, schema=Document, multimatch=True),
+            sx.semantic(query=embed(query), schema=Document),
+            sx.trigram(query=query, schema=Document),
         ],
         ident_fn=ident,
     )
