@@ -7,6 +7,7 @@ from typing import Callable, Generator, Hashable, Iterable, Literal, Sequence
 from sqlmodel import Column, Computed, SQLModel, Session, select, text, func
 from sqlalchemy import cast, Engine, literal
 from sqlalchemy.dialects.postgresql import TSVECTOR, REGCONFIG
+from sqlalchemy.sql import ColumnExpressionArgument
 from pydantic import BaseModel
 
 
@@ -49,36 +50,39 @@ class MicroSearch:
 
     def trigram[T: SQLModel](
         self,
-        query: str,
         schema: T,
+        query: str,
+        where: ColumnExpressionArgument | None = None,
         column: str = "text",
         limit: int = 20,
     ) -> Generator[Result[T], None, None]:
         """Perform trigram (fuzzy) search over column. Return similar results."""
         scorer = func.similarity(query, text(column))
-        statement = select(scorer, schema).order_by(scorer.desc()).limit(limit)
+        statement = select(scorer, schema).where(where).order_by(scorer.desc()).limit(limit)
         rows = self.session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="trigram")
 
     def semantic[T: SQLModel](
         self,
-        query: list[float],
         schema: T,
+        query: list[float],
+        where: ColumnExpressionArgument | None = None,
         column: str = "vector",
         limit: int = 20,
     ) -> Generator[Result[T], None, None]:
         """Perform semantic (vector) search over column. Return nearby results."""
         scorer = 1 - schema.model_fields[column].sa_column.cosine_distance(query)
-        statement = select(scorer, schema).order_by(scorer.desc()).limit(limit)
+        statement = select(scorer, schema).where(where).order_by(scorer.desc()).limit(limit)
         rows = self.session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="semantic")
 
     def fulltext[T: SQLModel](
         self,
-        query: str,
         schema: T,
+        query: str,
+        where: ColumnExpressionArgument | None = None,
         column: str = "text",
         limit: int = 20,
         multimatch: bool = True,
@@ -91,7 +95,7 @@ class MicroSearch:
             text(column) if is_tsvector else func.to_tsvector(text(column)),
             func.websearch_to_tsquery(query),
         )
-        statement = select(scorer, schema).order_by(scorer.desc()).limit(limit)
+        statement = select(scorer, schema).where(where).order_by(scorer.desc()).limit(limit)
         rows = self.session.exec(statement, params={"query": query})
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="fulltext")
