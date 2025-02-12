@@ -58,7 +58,10 @@ class MicroSearch:
     ) -> Generator[Result[T], None, None]:
         """Perform trigram (fuzzy) search over column. Return similar results."""
         scorer = func.similarity(query, text(column))
-        statement = select(scorer, schema).where(where).order_by(scorer.desc()).limit(limit)
+        statement = select(scorer, schema)
+        if where is not None:
+            statement = statement.where(where)
+        statement = statement.order_by(scorer.desc()).limit(limit)
         rows = self.session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="trigram")
@@ -73,7 +76,10 @@ class MicroSearch:
     ) -> Generator[Result[T], None, None]:
         """Perform semantic (vector) search over column. Return nearby results."""
         scorer = 1 - schema.model_fields[column].sa_column.cosine_distance(query)
-        statement = select(scorer, schema).where(where).order_by(scorer.desc()).limit(limit)
+        statement = select(scorer, schema)
+        if where is not None:
+            statement = statement.where(where)
+        statement = statement.order_by(scorer.desc()).limit(limit)
         rows = self.session.exec(statement)
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="semantic")
@@ -95,7 +101,10 @@ class MicroSearch:
             text(column) if is_tsvector else func.to_tsvector(text(column)),
             func.websearch_to_tsquery(query),
         )
-        statement = select(scorer, schema).where(where).order_by(scorer.desc()).limit(limit)
+        statement = select(scorer, schema)
+        if where is not None:
+            statement = statement.where(where)
+        statement = statement.order_by(scorer.desc()).limit(limit)
         rows = self.session.exec(statement, params={"query": query})
         for score, item in rows.all():
             yield Result(score=score, item=item, kind="fulltext")
@@ -109,7 +118,7 @@ def MicroSession(engine: Engine):
 
 def weighted_reciprocal_rank[T](
     arrays: Sequence[Iterable[T]],
-    ident_fn: Callable[[T], Hashable] = lambda item: id(item),
+    ident_fn: Callable[[T], Hashable] = id,
     weights: Sequence[float] | None = None,
     c: int | None = None,
 ) -> list[T]:
