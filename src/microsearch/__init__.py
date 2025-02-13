@@ -59,16 +59,20 @@ class MicroSearch:
         where: ColumnExpressionArgument | None = None,
         column: str = "text",
         limit: int = 20,
+        is_strict: bool = False,
     ) -> Generator[Result[T], None, None]:
         """Perform trigram (fuzzy) search over column. Return similar results."""
         try:
-            target_column = getattr(schema, column)
+            if is_strict:
+                target_column = getattr(schema, column)
         except AttributeError as exc:
             raise MicroSearchError(f"No such column - {column}") from exc
 
         scorer = func.word_similarity(query, text(column))
-        trigram_index_filter = target_column.op("%>")(query)
-        statement = select(scorer, schema).where(trigram_index_filter)
+        statement = select(scorer, schema)
+        if is_strict:
+            trigram_index_filter = target_column.op("%>")(query)
+            statement = statement.where(trigram_index_filter)
         if where is not None:
             statement = statement.where(where)
         statement = statement.order_by(scorer.desc()).limit(limit)
