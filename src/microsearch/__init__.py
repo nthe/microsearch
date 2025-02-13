@@ -77,29 +77,30 @@ class MicroSearch:
 
     def trigram[T: SQLModel](
         self,
-        schema: T,
+        table: T,
         query: str,
         where: ColumnExpressionArgument | None = None,
         column: str | InstrumentedAttribute = "text",
         limit: int = 20,
-        is_strict: bool = False,
+        strict: bool = False,
     ) -> Generator[Result[T], None, None]:
         """Perform trigram (fuzzy) search over column. Return similar results."""
         if isinstance(column, InstrumentedAttribute):
             column = column.key
 
         try:
-            if is_strict:
-                target_column = getattr(schema, column)
+            if strict:
+                target_column = getattr(table, column)
         except AttributeError as exc:
             raise MicroSearchError(f"No such column - {column}") from exc
 
         scorer = func.word_similarity(query, text(column))
-        statement = select(scorer, schema)
+        statement = select(scorer, table)
 
-        if is_strict:
+        if strict:
             trigram_index_filter = target_column.op("%>")(query)
             statement = statement.where(trigram_index_filter)
+
         if where is not None:
             statement = statement.where(where)
 
@@ -111,7 +112,7 @@ class MicroSearch:
 
     def semantic[T: SQLModel](
         self,
-        schema: T,
+        table: T,
         query: list[float],
         where: ColumnExpressionArgument | None = None,
         column: str | InstrumentedAttribute = "vector",
@@ -122,12 +123,13 @@ class MicroSearch:
             column = column.key
 
         try:
-            target_column = getattr(schema, column)
+            target_column = getattr(table, column)
         except AttributeError as exc:
             raise MicroSearchError(f"No such column - {column}") from exc
 
         scorer = 1 - target_column.cosine_distance(query)
-        statement = select(scorer, schema)
+        statement = select(scorer, table)
+
         if where is not None:
             statement = statement.where(where)
 
@@ -139,7 +141,7 @@ class MicroSearch:
 
     def fulltext[T: SQLModel](
         self,
-        schema: T,
+        table: T,
         query: str,
         where: ColumnExpressionArgument | None = None,
         column: str | InstrumentedAttribute = "text",
@@ -151,7 +153,7 @@ class MicroSearch:
             column = column.key
 
         try:
-            getattr(schema, column)
+            getattr(table, column)
         except AttributeError as exc:
             raise MicroSearchError(f"No such column - {column}") from exc
 
@@ -162,7 +164,7 @@ class MicroSearch:
             func.to_tsvector(text(column)),
             func.websearch_to_tsquery(query),
         )
-        statement = select(scorer, schema)
+        statement = select(scorer, table)
 
         fulltext_index_filter = func.to_tsvector(
             cast(literal("english"), type_=REGCONFIG),
@@ -181,7 +183,7 @@ class MicroSearch:
 
 
 @contextmanager
-def MicroSession(engine: Engine):
+def microsearch(engine: Engine):
     with Session(engine) as session:
         yield MicroSearch(session=session)
 
