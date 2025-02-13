@@ -11,6 +11,10 @@ from sqlalchemy.sql import ColumnExpressionArgument
 from pydantic import BaseModel
 
 
+class MicroSearchError(BaseException):
+    """Common microsearch error."""
+
+
 def oneof(text: str) -> str:
     """Convert phrase or query to multi-match statement."""
     return " OR ".join(text.split())
@@ -57,8 +61,14 @@ class MicroSearch:
         limit: int = 20,
     ) -> Generator[Result[T], None, None]:
         """Perform trigram (fuzzy) search over column. Return similar results."""
-        scorer = func.similarity(query, text(column))
-        statement = select(scorer, schema)
+        try:
+            target_column = getattr(schema, column)
+        except AttributeError as exc:
+            raise MicroSearchError(f"No such column - {column}") from exc
+
+        scorer = func.word_similarity(query, text(column))
+        trigram_index_filter = target_column.op("%>")(query)
+        statement = select(scorer, schema).where(trigram_index_filter)
         if where is not None:
             statement = statement.where(where)
         statement = statement.order_by(scorer.desc()).limit(limit)
@@ -75,7 +85,12 @@ class MicroSearch:
         limit: int = 20,
     ) -> Generator[Result[T], None, None]:
         """Perform semantic (vector) search over column. Return nearby results."""
-        scorer = 1 - schema.model_fields[column].sa_column.cosine_distance(query)
+        try:
+            target_column = getattr(schema, column)
+        except AttributeError as exc:
+            raise MicroSearchError(f"No such column - {column}") from exc
+
+        scorer = 1 - target_column.cosine_distance(query)
         statement = select(scorer, schema)
         if where is not None:
             statement = statement.where(where)
@@ -95,6 +110,11 @@ class MicroSearch:
         is_tsvector: bool = False,
     ) -> Generator[Result[T], None, None]:
         """Perform full-text search over column. Return matched results."""
+        try:
+            getattr(schema, column)
+        except AttributeError as exc:
+            raise MicroSearchError(f"No such column - {column}") from exc
+
         if multimatch:
             query = oneof(query)
         scorer = func.ts_rank(
