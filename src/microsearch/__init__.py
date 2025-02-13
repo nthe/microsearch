@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from textwrap import wrap
 from typing import Callable, Generator, Hashable, Iterable, Literal, Sequence
 
-from sqlmodel import Column, Computed, SQLModel, Session, select, text, func
+from sqlmodel import Column, Computed, Index, SQLModel, Session, select, text, func
 from sqlalchemy import cast, Engine, literal
 from sqlalchemy.dialects.postgresql import TSVECTOR, REGCONFIG
 from sqlalchemy.sql import ColumnExpressionArgument
@@ -29,6 +29,16 @@ class Result[T: SQLModel](BaseModel):
     kind: Literal["trigram", "fulltext", "semantic"]
     score: float
     item: T
+
+
+def TrigramIndex(table: str, column: str) -> Index:
+    """Create trigram index on given column of the table."""
+    return Index(
+        f"{table}_{column}_trgm_gist",
+        column,
+        postgresql_using="gist",
+        postgresql_ops={column: "gist_trgm_ops(siglen=256)"},
+    )
 
 
 def FullTextColumn(column: str) -> Column:
