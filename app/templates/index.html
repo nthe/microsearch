@@ -1,0 +1,118 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MicroSearch</title>
+    <style>
+        *,
+        input,
+        checkbox {
+            font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+        }
+
+        main {
+            max-width: 920px;
+            width: 90vw;
+            margin: 0 auto;
+        }
+
+        #search-field {
+            width: 100%;
+            border: none;
+            background: #424242;
+            color: white;
+            font-size: 1.1em;
+            font-weight: 200;
+            padding: 16px 24px;
+            border-radius: 32px;
+            box-shadow: 0 0 16px 4px #aaa;
+            outline: none;
+            margin: 12px 0;
+            position: sticky;
+            top: 32px;
+        }
+
+        #controls {
+            width: max-content;
+            margin: 0 auto;
+            position: sticky;
+            top: 84px;
+            background: #424242;
+            padding: 8px 18px;
+            color: white;
+            font-family: monospace;
+            border-bottom-left-radius: 24px;
+            border-bottom-right-radius: 24px;
+        }
+
+        ol {
+            padding: 0 24px;
+            margin: 0;
+        }
+
+        li {
+            margin: 16px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <input type="text" name="search" id="search-field">
+        <div id="controls">
+            <input type="checkbox" name="fulltext" id="fulltext-toggle" checked>
+            <label for="fulltext-toggle">Fulltext</label>
+            &nbsp;
+            <input type="checkbox" name="trigram" id="trigram-toggle" checked>
+            <label for="trigram-toggle">Trigram</label>
+            &nbsp;
+            <input type="checkbox" name="semantic" id="semantic-toggle" checked>
+            <label for="semantic-toggle">Semantic</label>
+        </div>
+        <ol id="results"></ol>
+    </main>
+    <script>
+        // input and output
+        const inputField = document.getElementById("search-field");
+        const results = document.getElementById("results")
+
+        // controls
+        const fulltext = document.getElementById("fulltext-toggle")
+        const trigram = document.getElementById("trigram-toggle")
+        const semantic = document.getElementById("semantic-toggle")
+
+        function highlight(keywords, text) {
+            const words = keywords.split(/\s/);
+            const pattern = new RegExp(`(${words.join('|')})`, 'gi');
+            return text.replace(pattern, match => `<mark>${match}</mark>`);
+        }
+
+        function debounce(func, timeout = 50) {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => { func.apply(this, args); }, timeout);
+            };
+        }
+
+        function update(e) {
+            fetch(`/search?q='${inputField.value}'&f=${+fulltext.checked}&t=${+trigram.checked}&s=${+semantic.checked}`)
+                .then(resp => resp.json())
+                .then(({ data }) => {
+                    results.textContent = '';
+                    for (const element of data) {
+                        const node = document.createElement("li")
+                        node.innerHTML = '<b>' + element.kind + '</b> @ '
+                        node.innerHTML += '<i>' + element.score.toFixed(5) + '</i><br/> '
+                        node.innerHTML += highlight(inputField.value, element.item.text)
+                        results.appendChild(node);
+                    }
+                })
+        }
+
+        inputField.addEventListener('keyup', debounce(update))
+    </script>
+</body>
+
+</html>
